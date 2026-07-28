@@ -64,9 +64,10 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Load Custom Configuration
+    - name: Load Custom Configuration & Files Overlay
       run: |
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
+        [ -d files ] && cp -r files openwrt/files
         cd openwrt
         make defconfig
 
