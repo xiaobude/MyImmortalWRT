@@ -1,6 +1,6 @@
-# MyOpenWRT - RK3566 ARM 平台精简固件项目
+# MyImmortalWRT - RK3566 ARM 平台精简固件项目
 
-基于 OpenWrt 定制，专为瑞芯微 RK3566 芯片（NanoPi R3S / 4K 电视盒子开发板，1GB 内存）打造的嵌入式 Linux 发行版。
+基于 ImmortalWrt 定制，专为瑞芯微 RK3566 芯片（NanoPi R3S ，1GB 内存）打造的嵌入式 Linux 发行版。
 
 ---
 
@@ -56,13 +56,13 @@ sudo apt install -y build-essential gcc-aarch64-linux-gnu \
 ```bash
 ./compile-plugins.sh
 ```
-*该脚本会自动下载对应的 OpenWrt 23.05.3 SDK，并自动拉取 OpenClash、MosDNS、OpenAppFilter 等源码仓库。*
+*该脚本会自动下载对应的 immiortalWrt 25.12.2 SDK，并自动拉取 OpenClash、MosDNS、OpenAppFilter 等源码仓库。*
 
 ### 3. 打包系统固件
 ```bash
 make firmware
 ```
-*完成后将在根目录生成 `MyOpenWRT-1.0.0-rk3566.img.gz`。*
+*完成后将在根目录生成 `MyImmiortalWRT-1.0.0-rk3566.img.gz`。*
 
 ---
 
