@@ -74,3 +74,5 @@ make firmware
 | 默认子网掩码 | `255.255.255.0` |
 | DNS | `114.114.114.114`, `223.5.5.5` |
 | 分区格式 | SquashFS (LZMA 压缩, 只读) + JFFS2 (可写) |
+
+可优先下载支持“恢复出厂设置”的 squashfs-sysupgrade.img.gz（28.8 MB的版本）
