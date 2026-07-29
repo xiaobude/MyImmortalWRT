@@ -56,7 +56,7 @@ sudo apt install -y build-essential gcc-aarch64-linux-gnu \
 ```bash
 ./compile-plugins.sh
 ```
-*该脚本会自动下载对应的 immiortalWrt 25.12.2 SDK，并自动拉取 OpenClash、MosDNS、OpenAppFilter 等源码仓库。*
+*该脚本会自动下载对应的 immiortalWrt 25.12.1 SDK，并自动拉取 OpenClash、MosDNS、OpenAppFilter 等源码仓库。*
 
 ### 3. 打包系统固件
 ```bash
