@@ -111,7 +111,7 @@ jobs:
           - 目标硬件: NanoPi R3S / Rockchip RK3566
           - 源码版本: ImmortalWrt v25.12.1 (最新 Release)
           - 精简插件: LuCI 简体中文、OpenClash、Tailscale (WireGuard)、ttyd (网页终端)
-          - 默认后台: 192.168.1.1 (密码空)
+          - 默认后台: 192.168.2.1 (密码空)
         files: ${{ env.FIRMWARE_PATH }}/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
