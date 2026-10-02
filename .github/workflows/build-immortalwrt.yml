@@ -29,7 +29,8 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # 与最近两次成功构建(run 5/6)保持同一 runner; ubuntu-24.04 待镜像能出后再单独验证
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout Repository
@@ -96,8 +97,39 @@ jobs:
       working-directory: /workdir/openwrt
       run: |
         echo "Starting parallel compilation with -j$(nproc)..."
-        make -j$(nproc) V=s || make -j1 V=s
-        echo "status=success" >> $GITHUB_OUTPUT
+        if make -j$(nproc) V=s > /tmp/build.log 2>&1; then
+          echo "status=success" >> $GITHUB_OUTPUT
+        else
+          echo "并行构建失败, 单核重跑以定位具体出错的包"
+          if make -j1 V=s >> /tmp/build.log 2>&1; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            tail -c 4000 /tmp/build.log
+            exit 1
+          fi
+        fi
+
+    - name: Report Failure Cause
+      if: failure()
+      working-directory: /workdir/openwrt
+      run: |
+        # 日志接口需要认证, 但 annotations 是公开可读的: 把失败原因塞进 ::error:: 消息里
+        {
+          echo "== 磁盘 =="; df -h /workdir | tail -1
+          echo "== 内存 =="; free -m | head -2
+          echo "== 出错位置 =="
+          grep -nE "Error [0-9]+$|\*\*\*|ERROR: |No space left|out of memory|Killed|cannot find|not found" /tmp/build.log | tail -45
+        } > /tmp/diag.txt
+        msg=$(sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g' -e 's/\r//g' /tmp/diag.txt)
+        echo "::error::$msg"
+
+    - name: Upload Build Log
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log-run${{ github.run_number }}
+        path: /tmp/build.log
+        retention-days: 7
 
     - name: Verify Images Have A Partition Table
       working-directory: /workdir/openwrt
