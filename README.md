@@ -1,28 +1,26 @@
-# MyImmortalWRT - RK3566 ARM 平台精简固件项目
+# MyImmortalWRT - RK3328 ARM 平台精简固件项目
 
-基于 ImmortalWrt 定制，专为瑞芯微 RK3566 芯片（NanoPi R3S ，1GB 内存）打造的嵌入式 Linux 发行版。
+基于 ImmortalWrt 定制，专为瑞芯微 **RK3328**（FriendlyElec **NanoPi R2S**，1GB 内存）打造的嵌入式 Linux 发行版。
+
+固件由 GitHub Actions 用**完整 ImmortalWrt 源码树**编译，产物是官方镜像结构（含 GPT 分区表、U-Boot/idbloader、内核 FIT、rootfs），可直接 TF 卡启动。
 
 ---
 
 ## 🎯 软件功能清单
 
-本项目针对 **1GB 内存与存储限制** 进行了定制，精简了非必要的服务（如 Docker、Samba、Aria2、Python 等），聚焦于高性能路由、网络加速与安全组网。
+针对 **1GB 内存与存储限制**做了精简，聚焦路由、代理分流与安全组网。
 
-### ✅ 选定包含的功能：
-- **LuCI**：Web 管理界面
-- **Firewall4 + nftables**：下一代 Linux 原生防火墙架构
-- **MosDNS**：智能 DNS 分流与解析
-- **OpenClash**：基于 Clash 内核的规则代理
-- **OpenAppFilter**：应用过滤与家长控制
-- **Tailscale**：零配置虚拟局域网 / 组网
-- **WireGuard**：原生轻量级 VPN 支持
+### ✅ 包含
+- **LuCI** Web 管理界面（简体中文）
+- **Firewall4 + nftables**
+- **OpenClash**：基于 Clash 内核的规则代理（v0.47.075，来自 ImmortalWrt luci feed）
+- **Tailscale + WireGuard**：零配置虚拟局域网 / 组网（ImmortalWrt v25.12.1 的 feeds 里没有 `luci-app-tailscale`，需用 `tailscale` 命令行登录与配置；WireGuard 有完整 LuCI 界面）
+- **ttyd**：网页终端
+- bash / curl / ca-bundle / unzip / dropbear
 
-### ❌ 精简排除的功能（已屏蔽，避免内存浪费）：
-- Docker 容器引擎 (`dockerd`)
-- Samba / KSMBD / NFS / FTP 文件共享
-- Aria2 / qBittorrent 下载服务
-- NAS 磁盘休眠与共享服务
-- Python 3 运行时环境
+### ❌ 精简排除
+- MosDNS、OpenAppFilter（`mosdns` 在 packages feed 里，但 `luci-app-mosdns`、`luci-app-oaf` 都不在，要加必须挂第三方仓库）
+- Docker、Samba/KSMBD/NFS/FTP、Aria2/qBittorrent、Python 3
 
 ---
 
@@ -30,49 +28,54 @@
 
 ```
 .
-├── config.mk            # 全局构建配置与功能包定义
-├── Makefile             # 主构建 Makefile (kernel, u-boot, plugins, firmware)
-├── build.sh             # 自动化构建主脚本
-├── compile-plugins.sh   # OpenWrt SDK 下载与选定插件仓库配置脚本
-├── pack-image.sh        # SquashFS 与固件镜像打包脚本
-├── kernel.config        # Linux 内核配置文件
-└── u-boot.config        # U-Boot 引导程序配置文件
+├── .github/workflows/build-immortalwrt.yml   # 唯一的构建入口 (GitHub Actions)
+├── immortalwrt-rk3328.config                 # 板型与软件包选择 (RK3328 / NanoPi R2S)
+├── files/etc/config/network                  # 根文件系统覆盖: LAN=eth1, 192.168.2.1
+└── pack-image-x86.sh / build-with-ib.sh      # 与 R2S 无关的 x86_64 软路由打包脚本
 ```
+
+> 本项目原先还有一套 `config.mk` / `Makefile` / `compile-plugins.sh` / `pack-image.sh`
+> 的"本地打包"流程，已删除。OpenWrt **SDK** 只能交叉编译出 `.ipk`，不产生内核、
+> U-Boot、idbloader 与分区表，因此那条路只会产出无分区表、点不亮的假镜像。
 
 ---
 
-## 🛠️ 编译与构建步骤
+## 🛠️ 构建步骤
 
-### 1. 安装编译依赖
-```bash
-sudo apt update
-sudo apt install -y build-essential gcc-aarch64-linux-gnu \
-    autoconf automake libtool pkg-config \
-    libncurses5-dev libssl-dev libelf-dev \
-    texinfo git wget unzip mksquashfs
-```
+固件在云端编译，本地不需要交叉工具链、不需要 WSL，也不需要下载 ImmortalWrt SDK。
+见 [README_CLOUD_BUILD.md](README_CLOUD_BUILD.md)：
 
-### 2. 初始化环境与准备插件
 ```bash
-./compile-plugins.sh
+git add -A && git commit -m "build" && git push
 ```
-*该脚本会自动下载对应的 immiortalWrt 25.12.1 SDK，并自动拉取 OpenClash、MosDNS、OpenAppFilter 等源码仓库。*
-
-### 3. 打包系统固件
-```bash
-make firmware
-```
-*完成后将在根目录生成 `MyImmiortalWRT-1.0.0-rk3566.img.gz`。*
+推送后在仓库 **Actions** 页触发工作流，产物在 Artifacts / Releases 下载。
 
 ---
 
 ## 📝 默认配置参数
 
 | 参数 | 默认值 |
-|------|-----|
+|------|--------|
 | 默认 IP | `192.168.2.1` |
-| 默认子网掩码 | `255.255.255.0` |
+| 子网掩码 | `255.255.255.0` |
 | DNS | `114.114.114.114`, `223.5.5.5` |
-| 分区格式 | SquashFS (LZMA 压缩, 只读) + JFFS2 (可写) |
+| LuCI 账号 | `root` / 空密码（首次登录请设置） |
+| LAN 网口 | `eth1`（USB RTL8153 那颗） |
+| WAN 网口 | `eth0`（SoC GMAC） |
+| 镜像格式 | SquashFS（只读 rootfs + overlay）与 Ext4 两种同时产出 |
 
-可优先下载支持“恢复出厂设置”的 squashfs-sysupgrade.img.gz（28.8 MB的版本）
+---
+
+## 🔌 烧录与首次启动
+
+1. 下载 `*-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz`。
+   **优先选 squashfs 版**：只读 rootfs + overlay 结构，支持"恢复出厂设置"
+   （failsafe 里 `firstboot`，或 LuCI 的 Backup / Flash Firmware 页重置），
+   配置弄坏了能回到初始状态。ext4 版空间利用率高，但没法这样重置。
+2. **烧前检查分区表**（这一步能挡住无效镜像）：
+   ```bash
+   zcat xxx-sysupgrade.img.gz | head -c 2097152 | grep -a -o 'EFI PART'
+   ```
+   必须有输出。空输出说明镜像无效，不要烧。
+3. 用 **balenaEtcher** 直接选 `.gz` 烧 TF 卡（不要用瑞芯微 SDDiskTool，它只接受带 `MEDIA:` 头的 `update.img`）。
+4. 网线插 **LAN 口**，电脑手动设 `192.168.2.x/24`，上电等约 2 分钟，访问 `http://192.168.2.1`。

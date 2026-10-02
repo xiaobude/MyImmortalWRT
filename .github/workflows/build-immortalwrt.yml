@@ -1,4 +1,4 @@
-name: Build ImmortalWrt v25.12.1 Streamlined for NanoPi R3S
+name: Build ImmortalWrt Streamlined for NanoPi R2S (RK3328)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,8 @@ on:
       - main
     paths:
       - '.github/workflows/build-immortalwrt.yml'
-      - 'immortalwrt-rk3566.config'
+      - 'immortalwrt-rk3328.config'
+      - 'files/**'
 
 permissions:
   contents: write
@@ -20,14 +21,15 @@ permissions:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_TAG: v25.12.1
-  CONFIG_FILE: immortalwrt-rk3566.config
+  CONFIG_FILE: immortalwrt-rk3328.config
+  DEVICE_PROFILE: friendlyarm_nanopi-r2s
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout Repository
@@ -38,29 +40,28 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force || true
         sudo apt-get update
-        sudo apt-get install -y build-essential clang flex bison yasm acl gettext libncurses-dev \
-          libssl-dev python3-setuptools python3-pyelftools python3-dev rsync unzip zlib1g-dev file snapd zstd lz4 git
+        sudo apt-get install -y build-essential clang flex bison yasm acl gettext \
+          libncurses-dev libssl-dev libelf-dev device-tree-compiler python3-setuptools \
+          python3-pyelftools python3-dev rsync unzip zlib1g-dev file snapd zstd lz4 \
+          git time
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
 
-    - name: Clone ImmortalWrt v25.12.1 Source Code
+    - name: Clone ImmortalWrt Source Code
       working-directory: /workdir
       run: |
         df -h
         git clone $REPO_URL -b $REPO_TAG --depth 1 openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Load Feeds & OpenClash Custom Package
+    - name: Load Feeds
       working-directory: /workdir/openwrt
       run: |
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        
-        # 导入 OpenClash 官方最新仓库
-        git clone https://github.com/vernesong/OpenClash.git package/custom/luci-app-openclash
-
+        # feeds.conf.default 按 commit 锁定版本; luci-app-openclash 由 immortalwrt/luci 直接提供,
+        # 不需要再 clone vernesong/OpenClash
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
@@ -70,6 +71,19 @@ jobs:
         [ -d files ] && cp -r files openwrt/files
         cd openwrt
         make defconfig
+        # profile 符号名若与源码树不符, defconfig 会静默丢弃它并编译别的板型
+        grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_${DEVICE_PROFILE}=y" .config || {
+          echo "::error::DEVICE profile ${DEVICE_PROFILE} 未被选中, 请核对 REPO_TAG 对应源码树里的板型符号名"
+          exit 1
+        }
+        # 包符号不存在时 defconfig 同样静默丢弃 -> 构建成功但固件缺功能, 所以逐个验明
+        for sym in CONFIG_PACKAGE_luci CONFIG_PACKAGE_luci-app-openclash \
+                   CONFIG_PACKAGE_ttyd CONFIG_PACKAGE_luci-app-ttyd CONFIG_PACKAGE_tailscale; do
+          grep -q "^${sym}=y" .config || {
+            echo "::error::$sym 未进入 .config: 该包在此 feeds 版本里不存在或已改名"
+            exit 1
+          }
+        done
 
     - name: Download Package Source Files
       working-directory: /workdir/openwrt
@@ -85,33 +99,54 @@ jobs:
         make -j$(nproc) V=s || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
 
+    - name: Verify Images Have A Partition Table
+      working-directory: /workdir/openwrt
+      run: |
+        cd bin/targets/rockchip/armv8/
+        shopt -s nullglob
+        imgs=(*${DEVICE_PROFILE}*.img.gz)
+        if [ ${#imgs[@]} -eq 0 ]; then
+          echo "::error::没有产出 ${DEVICE_PROFILE} 的镜像, 检查板型符号名与 .config"
+          exit 1
+        fi
+        for img in "${imgs[@]}"; do
+          if zcat "$img" | head -c 2097152 | grep -qa 'EFI PART'; then
+            echo "OK  $img (含 GPT 分区表)"
+          else
+            echo "::error::$img 无分区表, 镜像不可启动"
+            exit 1
+          fi
+        done
+
     - name: Organize Firmware Files
       if: steps.compile.outputs.status == 'success'
       working-directory: /workdir/openwrt
       run: |
         cd bin/targets/rockchip/armv8/
-        rm -rf *.buildinfo *.manifest sha256sums
+        rm -f *.buildinfo
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Upload Firmware to Artifacts
       if: steps.compile.outputs.status == 'success' && !cancelled()
       uses: actions/upload-artifact@v4
       with:
-        name: ImmortalWrt_v25.12.1_NanoPi_R3S_Streamlined
+        name: ImmortalWrt_NanoPi_R2S_RK3328_Streamlined
         path: ${{ env.FIRMWARE_PATH }}/*
 
     - name: Create GitHub Release
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ImmortalWrt-v25.12.1-NanoPi-R3S-${{ github.run_id }}
-        name: ImmortalWrt v25.12.1 NanoPi R3S 极简版固件发布
+        tag_name: ImmortalWrt-NanoPi-R2S-RK3328-${{ github.run_id }}
+        name: ImmortalWrt NanoPi R2S (RK3328) 精简版固件发布
         body: |
-          🎉 **ImmortalWrt v25.12.1 NanoPi R3S 极简版固件发布！**
-          - 目标硬件: NanoPi R3S / Rockchip RK3566
-          - 源码版本: ImmortalWrt v25.12.1 (最新 Release)
-          - 精简插件: LuCI 简体中文、OpenClash、Tailscale (WireGuard)、ttyd (网页终端)
-          - 默认后台: 192.168.2.1 (密码空)
+          🎉 **ImmortalWrt NanoPi R2S 精简版固件发布！**
+          - 目标硬件: FriendlyElec NanoPi R2S / Rockchip RK3328 (1GB RAM)
+          - 源码版本: ${{ env.REPO_TAG }}
+          - 插件: LuCI 简体中文、OpenClash、Tailscale (WireGuard)、ttyd (网页终端)
+          - 默认后台: http://192.168.2.1 (用户 root, 密码空)
+          - 网口: LAN = eth1 (USB RTL8153), WAN = eth0 (GMAC)
+          - 烧录: TF 卡用 balenaEtcher 直接烧 squashfs 或 ext4 的 sysupgrade .img.gz
         files: ${{ env.FIRMWARE_PATH }}/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
