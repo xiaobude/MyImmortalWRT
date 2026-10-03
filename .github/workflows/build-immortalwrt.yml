@@ -64,6 +64,8 @@ jobs:
         # feeds.conf.default 按 commit 锁定版本; luci-app-openclash 由 immortalwrt/luci 直接提供,
         # 不需要再 clone vernesong/OpenClash
         ./scripts/feeds update -a
+        # 移除损坏的 rust 包 (其上游 ci-artifacts 404 导致构建崩溃，且本精简固件无需 rust)
+        rm -rf feeds/packages/lang/rust
         ./scripts/feeds install -a
 
     - name: Load Custom Configuration & Files Overlay
@@ -79,6 +81,8 @@ jobs:
         make defconfig
         sed -i 's/CONFIG_PACKAGE_kmod-usb-storage-extras=y/# CONFIG_PACKAGE_kmod-usb-storage-extras is not set/g' .config
         sed -i 's/CONFIG_PACKAGE_kmod-usb-storage-extras=m/# CONFIG_PACKAGE_kmod-usb-storage-extras is not set/g' .config
+        sed -i 's/CONFIG_PACKAGE_rust=y/# CONFIG_PACKAGE_rust is not set/g' .config
+        sed -i 's/CONFIG_PACKAGE_rust=m/# CONFIG_PACKAGE_rust is not set/g' .config
         # profile 符号名若与源码树不符, defconfig 会静默丢弃它并编译别的板型
         grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_${DEVICE_PROFILE}=y" .config || {
           echo "::error::DEVICE profile ${DEVICE_PROFILE} 未被选中, 请核对 REPO_TAG 对应源码树里的板型符号名"
@@ -125,7 +129,7 @@ jobs:
           echo "== 磁盘 =="; df -h /workdir | tail -1
           echo "== 内存 =="; free -m | head -2
           echo "== 出错位置 =="
-          grep -nE "Error [0-9]+$|\*\*\*|ERROR: |No space left|out of memory|Killed|cannot find|not found" /tmp/build.log | tail -45
+          grep -nE "Error [0-9]+$|\*\*\*|failed to build|No space left|out of memory|Killed|cannot find|not found" /tmp/build.log | tail -45
         } > /tmp/diag.txt
         msg=$(sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g' -e 's/\r//g' /tmp/diag.txt)
         echo "::error::$msg"
