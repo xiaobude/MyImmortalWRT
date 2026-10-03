@@ -68,10 +68,17 @@ jobs:
 
     - name: Load Custom Configuration & Files Overlay
       run: |
+        # 修复 Linux 6.12 内核缺少 ums-alauda 等驱动导致的 kmod-usb-storage-extras 校验报错
+        sed -i '/kmod-usb-storage-extras/d' openwrt/package/emortal/automount/Makefile 2>/dev/null || true
+        sed -i '/define KernelPackage\/usb-storage-extras/,/endef/d' openwrt/package/kernel/linux/modules/usb.mk 2>/dev/null || true
+        sed -i '/KernelPackage,usb-storage-extras/d' openwrt/package/kernel/linux/modules/usb.mk 2>/dev/null || true
+
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
         [ -d files ] && cp -r files openwrt/files
         cd openwrt
         make defconfig
+        sed -i 's/CONFIG_PACKAGE_kmod-usb-storage-extras=y/# CONFIG_PACKAGE_kmod-usb-storage-extras is not set/g' .config
+        sed -i 's/CONFIG_PACKAGE_kmod-usb-storage-extras=m/# CONFIG_PACKAGE_kmod-usb-storage-extras is not set/g' .config
         # profile 符号名若与源码树不符, defconfig 会静默丢弃它并编译别的板型
         grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_${DEVICE_PROFILE}=y" .config || {
           echo "::error::DEVICE profile ${DEVICE_PROFILE} 未被选中, 请核对 REPO_TAG 对应源码树里的板型符号名"
